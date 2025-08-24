@@ -14,9 +14,10 @@ def sample_morlet(t, lambda_, sigma):
     t_times_lambda = t * lambda_
     g = sample_gauss(t_times_lambda, sigma)
     beta = (sample_gauss(-1.0, 1.0 / sigma) / sample_gauss(0.0, 1.0 / sigma))
-    return lambda_ * (np.exp(t_times_lambda*(1j)) - beta) * g
+    psi = lambda_ * (np.exp(t_times_lambda*(1j)) - beta) * g
+    return psi
 
-def morlet_filter_freq(N, lambda_, sigma):
+def morlet_filter_freq(N, lambda_, sigma, force_analyticity = False, norm_peak_one = False):
     """
     Generate a discrete morlet filter in the frequency domain containing N samples with scaling factor lambda_ and Guassian envelope SD sigma. N should be the convolution length. 
     This filter only has real frequency components (IR has Hermitian symmetry with respect to half of the buffer length).
@@ -24,7 +25,16 @@ def morlet_filter_freq(N, lambda_, sigma):
     hN = N//2
     n = np.arange(-hN, N - hN)
     morlet = sample_morlet(n, lambda_, sigma)
-    return np.abs(fft(morlet))
+    morlet = np.abs(fft(morlet))
+    if force_analyticity:
+        if lambda_ > 0:
+            morlet[hN+1:] = 0
+        else:
+            morlet[0:hN] = 0
+        if N % 2 == 0: morlet[hN] = 0.5 * morlet[hN]
+    if norm_peak_one:
+        morlet = morlet / np.max(morlet)
+    return morlet
 
 def gauss_filter_freq(N, sigma):
     """

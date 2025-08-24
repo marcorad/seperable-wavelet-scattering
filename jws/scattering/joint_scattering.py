@@ -80,9 +80,9 @@ class JointScattering:
     
     def _should_prune(self, lambda_filt: List[float], lambda_demod: List[float], level: int):
         for dim, (lf, ld) in enumerate(zip(lambda_filt, lambda_demod)):
-            beta = cfg.get_beta(self.Q[dim][level])
-            sigma_psi_w_demod = max(calculate_sigma_psi_w(self.Q[dim][level-1]) * abs(ld), calculate_sigma_phi_w(self.d[dim], self.Q[dim][level-1]))
-            sigma_psi_w_filt = max(calculate_sigma_psi_w(self.Q[dim][level-1]) * abs(lf), calculate_sigma_phi_w(self.d[dim], self.Q[dim][level-1]))
+            beta = cfg.get_beta(self.d[dim],self.Q[dim][level])
+            sigma_psi_w_demod = max(calculate_sigma_psi_w(self.d[dim], self.Q[dim][level-1]) * abs(ld), calculate_sigma_phi_w(self.d[dim], self.Q[dim][level-1]))
+            sigma_psi_w_filt = max(calculate_sigma_psi_w(self.d[dim], self.Q[dim][level-1]) * abs(lf), calculate_sigma_phi_w(self.d[dim], self.Q[dim][level-1]))
             # prune only when demodulated filter's centre freq is not at least within beta standard deviations of the current filter
             # note that we use the abs value of the lambdas since lambdas can be positive or negative
             # |----------*----------|
@@ -93,7 +93,7 @@ class JointScattering:
             # these intervals must overlap, 
             # * is the centre of the spectrum, d is the significant bandwidth of the demodulated filter (via modulus), and f is the morlet filter under consideration which has a center x
             EPS = 1e-9 #for floating point error
-            if cfg.get_beta_prune()*sigma_psi_w_demod < abs(lf): return True # - sigma_psi_w_filt * beta + EPS
+            if cfg.get_beta_prune(self.d[dim],self.Q[dim][level])*sigma_psi_w_demod < abs(lf): return True # - sigma_psi_w_filt * beta + EPS
         return False
     
     def scattering(self, x: Tensor, normalise = False, batch_size = None, scat_to_cpu=True) -> Tensor:

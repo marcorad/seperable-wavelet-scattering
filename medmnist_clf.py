@@ -17,6 +17,8 @@ from sklearn.preprocessing import LabelEncoder
 import torch.nn as nn
 from tqdm import tqdm
 
+# torch.set_default_device('cuda')
+
 
 
 class DeepClassifier(nn.Module):
@@ -44,6 +46,7 @@ class DeepClassifier(nn.Module):
 class LinearTrainer:
     def __init__(self, model : nn.Module) -> None:
         self.model = model
+        self.model.cuda()
         
     def train(self, X_train, y_train, X_val, y_val, n_epochs=100, lr=1e-3): 
         n_classes = len(torch.unique(y_train))     
@@ -56,7 +59,6 @@ class LinearTrainer:
         for v in y_train.unique():
             y_train_weights[v] = torch.sum(y_train == v)
             
-        print('Train counts: ', y_train_weights.tolist())
         y_train_weights = 1 / y_train_weights.type(torch.float32)
         y_train_weights /= y_train_weights.sum()      
         
@@ -69,7 +71,7 @@ class LinearTrainer:
         y_val = nn.functional.one_hot(y_val).type(torch.float32).cuda() if n_classes > 2 else y_val.type(torch.float32).cuda()
         generator = torch.Generator(device='cuda')
         self.batch_size = 256
-        self.loader = DataLoader(TensorDataset(X_train, y_train), batch_size=self.batch_size, generator=generator, shuffle=True)
+        self.loader = DataLoader(TensorDataset(X_train, y_train), batch_size=self.batch_size, shuffle=True, generator=generator)
         optim = torch.optim.Adam(params=self.model.parameters(), lr = lr)
         loss_fn = nn.CrossEntropyLoss(weight=y_train_weights) if n_classes > 2 else nn.BCELoss()
         
@@ -135,58 +137,65 @@ class LinearTrainer:
         return params
         
         
+ 
+if __name__ == '__main__':               
+
+
+    EN_LDA_DR = False
+
+    results = {}
+
+    Q = 1
+    Qs = [
+        [[Q], [Q], [Q]],
+        [[Q, Q], [Q, Q], [Q, Q]],
+    ]
+    ds = [
+        # [2]*3,
+        [4]*3,
+        [6]*3,
+        [8]*3
+    ]
+
+    for Q in Qs:
+        for d in ds:
+            for dset in DATASETS:
+                fname = f'medmnist3d-cache/ws-{dset}-mnist3d-{Q=}-{d=}.pkl' #run medmnist3d_features.py before running this
+                with open(fname, 'rb') as file:
+                    X_train, y_train, X_test, y_test, X_val, y_val = pkl.load(file)
+                    y_train = torch.from_numpy(y_train.astype(np.float32))
+                    y_test = torch.from_numpy(y_test.astype(np.float32))
+                    y_val = torch.from_numpy(y_val.astype(np.float32))
+                    
+                X_train = torch.reshape(X_train, (X_train.shape[0], -1))    
+                X_test = torch.reshape(X_test, (X_test.shape[0], -1))  
+                X_val = torch.reshape(X_val, (X_val.shape[0], -1)) 
                 
+                n_classes = len(torch.unique(y_train))             
 
+                mu = 0 #torch.mean(X_train, axis=0)
+                std = 1 #torch.std(X_train, axis=0)
 
-EN_LDA_DR = False
-
-results = {}
-
-for d in DATASETS:
-    print(
-        "---------\n"
-        f"{d}\n"
-        "---------\n"
-    )
-    fname = f'medmnist3d-feats/ws-{d}-mnist3d-Q=[[0.75, 0.75], [0.75, 0.75], [0.75, 0.75]].pkl' #run medmnist3d_features.py before running this
-    with open(fname, 'rb') as file:
-        X_train, y_train, X_test, y_test, X_val, y_val = pkl.load(file)
-        y_train = torch.from_numpy(y_train.astype(np.float32))
-        y_test = torch.from_numpy(y_test.astype(np.float32))
-        y_val = torch.from_numpy(y_val.astype(np.float32))
+                X_train = (X_train - mu)/std
+                X_test = (X_test - mu)/std
+                X_val = (X_val - mu)/std    
+                
+                net = DeepClassifier(X_train.shape[1],[512, 512, 256], n_classes)
+                trainer = LinearTrainer(net)
+                
+                trainer.train(X_train, y_train, X_val, y_val, n_epochs=100, lr=1e-3)
+                acc, auc = trainer.test_acc(X_test, y_test)
+                
+                if str(Q) not in results.keys(): results[str(Q)] = {}
+                if str(d) not in results[str(Q)].keys(): results[str(Q)][str(d)] = {}
+                results[str(Q)][str(d)][dset] = {
+                    'acc': acc.item(),
+                    'auc': auc
+                }
+                print(f'{dset} ({d=}, {Q=}): ACC={acc*100:.3f} AUC={auc:.3f}')
         
-    X_train = torch.reshape(X_train, (X_train.shape[0], -1))    
-    X_test = torch.reshape(X_test, (X_test.shape[0], -1))  
-    X_val = torch.reshape(X_val, (X_val.shape[0], -1)) 
-     
-    n_classes = len(torch.unique(y_train)) 
-    print(f'{n_classes=}') 
     
-
-    mu = 0 #torch.mean(X_train, axis=0)
-    std = 1 #torch.std(X_train, axis=0)
-
-    X_train = (X_train - mu)/std
-    X_test = (X_test - mu)/std
-    X_val = (X_val - mu)/std    
     
-    net = DeepClassifier(X_train.shape[1],[1024, 512, 256], n_classes)
-    trainer = LinearTrainer(net)
-    print(trainer.num_trainable_parameters())
-    trainer.train(X_train, y_train, X_val, y_val, n_epochs=100, lr=4e-4 if d != 'fracture' else 1e-5)
-    acc, auc = trainer.test_acc(X_test, y_test)
-    results[d] = {'acc': acc.item(), 'auc': auc, 'n_classes': n_classes}
-    print(f'Test Accuracy: {acc: .3f}, AUC: {auc: .3f}')
-    
-  
-  
-import pprint    
-pprint.pprint(results)
-print('Average results')
-avg_auc = 0
-avg_acc = 0
-for k, v in results.items():
-    avg_auc += v['auc'] / len(results.keys())
-    avg_acc += v['acc'] / len(results.keys())
-    
-print(f'{avg_auc=}, {avg_acc=}')
+    with open('medmnist3d-results/results.json', 'w') as file:
+        import json
+        json.dump(results, file, indent=4)

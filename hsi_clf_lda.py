@@ -9,16 +9,17 @@ from tqdm import tqdm
 from jws.dataprocessing import hsi
 import gc
 
-Q = 0.75
-d_hyp_configs = [8, 16, 4, 8, 16, 4, 8]
-d_im_configs =  [2, 2, 4, 4, 4,  8, 8]
-
+Q = 1
+d_hyp_configs = [4, 6, 8, 6, 8] #  
+d_im_configs =  [2, 2, 2, 4, 4] #  
 
 cfg.cuda()
 
-cfg.set_alpha(Q,    2.5, False)
-cfg.set_alpha(Q,    2.5, True)
-cfg.set_beta(Q,     2.5)
+# cfg.set_alpha(Q,    2.5, False)
+# # cfg.set_alpha(Q,    2.0, True)
+# cfg.set_beta(Q,     2.5)
+# cfg.FORCE_ANALYTICITY = True
+# cfg.NORMALISE_LITTLE_WOOD_PALEY = False
 
 hsi_data = hsi.load()
 
@@ -46,6 +47,8 @@ for hsi_im in hsi_data[:]:
         
         torch.cuda.empty_cache()
 
+        # if d_im == 2:   cfg.set_alpha(Q,    1.8, True)
+        # else:           cfg.set_alpha(Q,    2.3, True)
         sws = JointScattering(list(X.shape), [d_im, d_im, d_hyp], [[Q], [Q], [Q]], allow_ds=[False, False, True], remove_highly_corr_filter=True)
         X = torch.from_numpy(X[None, :, :, :]).cuda()
         s = sws.scattering(X).cpu().numpy()[0, :, :, :, :]        
@@ -86,7 +89,7 @@ for hsi_im in hsi_data[:]:
             return train_idx_ret, test_idx_ret        
         
         gc.collect()
-
+        # continue
         sizes = [15, -1]
         for sz in sizes:
             acc = []
@@ -106,8 +109,8 @@ for hsi_im in hsi_data[:]:
                     X_test, y_test = X[test_idx, :], y[test_idx]
                 
                 
-                mu =  np.mean(X_train, axis=0)
-                std =  np.std(X_train, axis=0)
+                mu =  0 #np.mean(X_train, axis=0)
+                std =  1 #np.std(X_train, axis=0)
                 X_train = (X_train - mu) / std
                 X_test = (X_test - mu) / std
                 c, counts = np.unique(y, return_counts=True)

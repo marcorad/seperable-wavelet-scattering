@@ -5,11 +5,13 @@ import sys
 sys.path.append('../python')
 from jws.scattering.config import cfg
 
-Q = 0.75
+Q = 1
 cfg.cuda()
-cfg.set_alpha(Q,    2.5, False)
-cfg.set_alpha(Q,    2.5, True)
-cfg.set_beta(Q,     2.5)
+# cfg.set_alpha(Q,    2.5, False)
+# cfg.set_alpha(Q,    2.0, True)
+# cfg.set_beta(Q,     2.5)
+# cfg.NORMALISE_LITTLE_WOOD_PALEY = True
+# cfg.FORCE_ANALYTICITY = True
 
 from jws.scattering.joint_scattering import JointScattering
 
@@ -59,44 +61,61 @@ def augment_train(X, y, tot_examples_in_each_class, keep_prop = True):
         
     
 
-Q = [[Q, Q], [Q, Q], [Q, Q]]
-d = [4]*3
+
+
+
 N = [28, 28, 28]
 AUG = False
 
-ws = JointScattering(N, d, Q, remove_highly_corr_filter=True)
+Qs = [
+    [[Q], [Q], [Q]],
+    [[Q, Q], [Q, Q], [Q, Q]],
+]
+ds = [
+    [2]*3,
+    [4]*3,
+    [6]*3,
+    [8]*3
+]
+
+for d in ds:
+    for Q in Qs:
+
+        ws = JointScattering(N, d, Q, remove_highly_corr_filter=True)
 
 
 
-for d in DATASETS:
-    print(d)
-    X_train, y_train, X_test, y_test, X_val, y_val = load_train_test(d, False)
-    
-    def normalise(X):
-        # p = np.std(X, axis=(1, 2, 3), keepdims=True)
-        # p[p==0] = 1
-        # X /= p.astype(config.NUMPY_REAL)
-        return X
-    
-    X_train = X_train.astype(np.float32)/256
-    X_train = normalise(X_train)
-    if AUG: X_train, y_train = augment_train(X_train, y_train, 200 if d == 'organ' else 2000)
-    
-    X_test = X_test.astype(np.float32)/256
-    X_test = normalise(X_test)
-    
-    X_val = X_val.astype(np.float32)/256
-    X_val = normalise(X_val)
-    torch.cuda.empty_cache()
-    norm = False
-    s_train = ws.scattering(torch.from_numpy(X_train).type(cfg.REAL_DTYPE).cuda(), norm)
-    print(s_train.shape)
-    s_test = ws.scattering(torch.from_numpy(X_test).type(cfg.REAL_DTYPE).cuda(), norm)
-    s_val = ws.scattering(torch.from_numpy(X_val).type(cfg.REAL_DTYPE).cuda(), norm)
+        for dset in DATASETS:
+            print(dset)
+            X_train, y_train, X_test, y_test, X_val, y_val = load_train_test(dset, False)
+            
+            def normalise(X):
+                # p = np.std(X, axis=(1, 2, 3), keepdims=True)
+                # p[p==0] = 1
+                # X /= p.astype(config.NUMPY_REAL)
+                return X / np.max(X, axis=(1,2,3))[:, None, None, None]
+            
+            #TODO: certain datasets must be specially normalised
+            
+            X_train = X_train.astype(np.float32)/256
+            X_train = normalise(X_train)
+            if AUG: X_train, y_train = augment_train(X_train, y_train, 200 if dset == 'organ' else 2000)
+            
+            X_test = X_test.astype(np.float32)/256
+            X_test = normalise(X_test)
+            
+            X_val = X_val.astype(np.float32)/256
+            X_val = normalise(X_val)
+            torch.cuda.empty_cache()
+            norm = False
+            s_train = ws.scattering(torch.from_numpy(X_train).type(cfg.REAL_DTYPE).cuda(), norm)
+            print(s_train.shape)
+            s_test = ws.scattering(torch.from_numpy(X_test).type(cfg.REAL_DTYPE).cuda(), norm)
+            s_val = ws.scattering(torch.from_numpy(X_val).type(cfg.REAL_DTYPE).cuda(), norm)
 
-    fname = f'ws-{d}-mnist3d-{Q=}.pkl'
+            fname = f'ws-{dset}-mnist3d-{Q=}-{d=}.pkl'
 
-    import pickle as pkl
-    with open('data/' + fname, 'wb') as file:
-        pkl.dump((s_train, y_train, s_test, y_test, s_val, y_val), file)
+            import pickle as pkl
+            with open('medmnist3d-cache/' + fname, 'wb') as file:
+                pkl.dump((s_train, y_train, s_test, y_test, s_val, y_val), file)
 

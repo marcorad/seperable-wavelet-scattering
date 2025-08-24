@@ -4,9 +4,11 @@ import numpy as np
 from jws.scattering.config import cfg
 
 Q = 1
-cfg.set_alpha(Q,    2.0, False)
+cfg.set_alpha(Q,    2.5, False)
 cfg.set_alpha(Q,    2.0, True)
 cfg.set_beta(Q,     2.5)
+cfg.NORMALISE_LITTLE_WOOD_PALEY = True
+cfg.FORCE_ANALYTICITY = True
 
 N = [256, 256]
 d = [8,8]
@@ -28,7 +30,7 @@ Y = np.linspace(-0.5, 0.5, Npad[0])
 s = np.zeros(Npad)
 
 
-c = 0.75
+c = 0.85
 
 for l in lambdas:
     psi0 = filterbank.get_wavelet_filter(fb, 0, 0, 1, l[0])

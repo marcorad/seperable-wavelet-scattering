@@ -16,12 +16,12 @@ def calculate_padding_1d(N: int, d: int):
     N_pad = N + left + right
     return left, right, N_pad
 
-def calculate_sigma_psi_w(Q):
-    alpha = cfg.get_alpha(Q)
+def calculate_sigma_psi_w(d, Q):
+    alpha = cfg.get_alpha(d, Q)
     return 1 / alpha * (2**(1/Q) - 1)
 
 def calculate_sigma_phi_w(d, Q):
-    sigma_phi = d * cfg.get_beta(Q) / np.pi # phi time std
+    sigma_phi = d * cfg.get_beta(d, Q) / np.pi # phi time std
     sigma_phi_w = 1 / sigma_phi # phi freq std
     return sigma_phi_w
     
@@ -54,21 +54,22 @@ def _filterbank_1d(N: int, d: int, Q: float, startfreq: float = None, include_ne
       
     if input_ds_factors == None: input_ds_factors = [1]
     
-    alpha = cfg.get_alpha(Q, is_linear=False)
-    alpha_lin = cfg.get_alpha(Q, is_linear=True)
-    beta = cfg.get_beta(Q)
+    alpha = cfg.get_alpha(d, Q)
+    alpha_lin = cfg.get_alpha_lin(d, Q)
+    alpha_start = cfg.get_alpha_start(d, Q)
+    beta = cfg.get_beta(d, Q)
     pi = np.pi
     
     sigma_phi = d * beta / pi # phi time std
     sigma_phi_w = 1 / sigma_phi # phi freq std
     
-    sigma_psi_w = calculate_sigma_psi_w(Q) # psi freq std
+    sigma_psi_w = calculate_sigma_psi_w(d,Q) # psi freq std
     sigma_psi = 1 / sigma_psi_w # psi time std
     
-    lambda_0 = startfreq * 2 * pi if startfreq else sigma_phi_w * alpha_lin    
+    lambda_0 = startfreq * 2 * pi if startfreq else sigma_phi_w * alpha_start    
     
-    assert lambda_0 >= sigma_phi_w * alpha_lin, f'A starting frequency of {startfreq} is too small. Must be at least {sigma_phi_w * alpha_lin / 2 / pi}.'
-    assert lambda_0 < pi, f'Invariance scale to small for parameters alpha={alpha_lin}, beta={cfg.get_beta(Q)} to allow for a single filter. Try increasing the invariance scale or decreasing beta and/or alpha'
+    # assert lambda_0 >= sigma_phi_w * alpha_start, f'A starting frequency of {startfreq} is too small. Must be at least {sigma_phi_w * alpha_lin / 2 / pi}.'
+    # assert lambda_0 < pi, f'Invariance scale to small for parameters alpha={alpha_lin}, beta={cfg.get_beta(d, Q)} to allow for a single filter. Try increasing the invariance scale or decreasing beta and/or alpha'
     
     fb = {}    
     compounded_output_ds_factors = set()
@@ -79,9 +80,13 @@ def _filterbank_1d(N: int, d: int, Q: float, startfreq: float = None, include_ne
         #get all linear lambdas
         while lambda_*sigma_psi_w < sigma_phi_w and lambda_ < upper_limit:
             morlet_params.append((lambda_, sigma_phi * lambda_)) #limit the bandwidth to time support
-            lambda_ += alpha_lin * sigma_phi_w #place the next filter alpha_lin stds away 
+            if (lambda_*2**(1/Q))*sigma_psi_w < sigma_phi_w:
+                lambda_ += alpha_lin * sigma_phi_w #place the next filter alpha_lin stds away if we can't scale exponentially yet
+            else:
+                lambda_ *= 2**(1/Q) # we can place exponentially - break out
+                break
         #get all exponential lambdas
-        while lambda_ < upper_limit:
+        while lambda_ <= upper_limit:
             morlet_params.append((lambda_, sigma_psi))
             lambda_ *= 2**(1/Q) #sigma_psi is constructed such that the current wavelet at lambda_ decays by alpha stds at the wavelet placed at lambda_*2^(1/Q) 
             
@@ -97,7 +102,16 @@ def _filterbank_1d(N: int, d: int, Q: float, startfreq: float = None, include_ne
         # sample all morlets
         morlets = {}
         for lambda_, sigma_t in morlet_params:
-            morlets[lambda_] = morlet_filter_freq(N//d_i, lambda_=lambda_*d_i, sigma=sigma_t) # since we have an input downsampling by d_i, we must scale lambda accordingly
+            morlets[lambda_] = morlet_filter_freq(N//d_i, lambda_=lambda_*d_i, sigma=sigma_t, force_analyticity=cfg.FORCE_ANALYTICITY, norm_peak_one=cfg.NORMALISE_PEAK_ONE) # since we have an input downsampling by d_i, we must scale lambda accordingly
+            
+        if cfg.NORMALISE_LITTLE_WOOD_PALEY:
+            esum = np.zeros(N//d_i)
+            for l, m in morlets.items():
+                esum += m**2
+                
+            norm = np.max(esum)**0.5
+            for l in morlets.keys():
+                morlets[l] = morlets[l] / norm
             
         #compute the amount each morlet may be downsampled
         ds_after_filtering = {}
@@ -106,8 +120,10 @@ def _filterbank_1d(N: int, d: int, Q: float, startfreq: float = None, include_ne
             EPSILON = 1e-9 # some error margin allowed
             ds = max(floor(pi * sigma_t / beta / d_i + EPSILON), 1) # this becomes pi / ( lambda * (2^(1/Q) - 1) * beta / alpha ) / d_i
             while d % ds != 0: ds -= 1
+            while d % (ds * d_i) != 0: ds -= 1
             ds_after_filtering[p[0]] = ds
             compounded_output_ds_factors.add(ds * d_i)
+            assert d % (ds * d_i) == 0
         ds_after_filtering[0] = d // d_i
             
         # sample the gaussian lpf
@@ -193,6 +209,10 @@ def get_wavelet_filter(fb: List, dim: int, level: int, input_ds: int, lambda_: f
     """
     if lambda_ == 0: return fb[dim][level][input_ds]['phi']
     return fb[dim][level][input_ds]['psi'][lambda_]
+
+def normalise_wavelet_filter(fb: List, dim: int, level: int, input_ds: int, lambda_: float, norm: float): 
+    if lambda_ == 0: return
+    fb[dim][level][input_ds]['psi'][lambda_] /= norm
 
 def get_output_downsample_factor(fb: List, dim: int, level: int, input_ds: int, lambda_: float) -> int:
     """Helper function to get the amount of downsampling required after performing filtering.

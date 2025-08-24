@@ -17,8 +17,14 @@ for fname in os.listdir(PATH):
             else:
                 if r['mean'] > best_10perc['mean']:
                     best_10perc = r
-        print(best_15)
-        print(best_10perc)
+                    
+        print("15 samples")
+        print('------------------')
+        print(f'${best_15["mean"]:.2f} \\pm {best_15["std"]:.2f}$ & $({", ".join([str(d) for d in best_15["d"]])})^T$')
+        # print(best_10perc)
+        print("% samples")
+        print('------------------')
+        print(f'${best_10perc["mean"]:.2f} \\pm {best_10perc["std"]:.2f}$ & $({", ".join([str(d) for d in best_10perc["d"]])})^T$')
             
     print()
         

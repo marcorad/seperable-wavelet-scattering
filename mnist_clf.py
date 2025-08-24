@@ -11,10 +11,12 @@ from jws.scattering.config import cfg
 from sklearn.model_selection import train_test_split
 
 cfg.cuda()
-cfg.set_alpha(1,    2.5, False)
-cfg.set_alpha(1,    2.0, True)
-cfg.set_beta(1,     2.5)
-cfg.set_beta_prune(2.5)
+# cfg.set_alpha(1,    2.5, False)
+# cfg.set_alpha(1,    2.5, True)
+# cfg.set_beta(1,     2.5)
+# cfg.set_beta_prune(2.5)
+# cfg.FORCE_ANALYTICITY = True
+# cfg.NORMALISE_LITTLE_WOOD_PALEY = False
 from sklearn.preprocessing import normalize
 
 torch.cuda.empty_cache()
@@ -22,9 +24,10 @@ from kymatio.torch import Scattering2D
 
 
 TRAIN_SIZES = [1000,2000,5000,10000,20000,40000,60000]
+q = 1
 Q_CONFIGS = [
-    [[1], [1]],
-    [[1, 1], [1, 1]]
+    [[q], [q]],
+    [[q, q], [q, q]]
 ]
 
 results = {}

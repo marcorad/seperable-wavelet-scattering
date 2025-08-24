@@ -1,0 +1,1 @@
+This directory caches MedMNIST3D features as pickle files so that we don't have to recompute everything during training runs. The files are large, so are ignored in the repository.

@@ -1,2 +1,2 @@
-medmnist3d-feats/*
+medmnist3d-cache/*.pkl
 **/__pycache__
